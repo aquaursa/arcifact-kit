@@ -28,4 +28,4 @@ audit in one sitting). The method is preregistration and
 adversarial gating, stated in docs/PROTOCOL.md. Patent pending,
 GB2618664.3.
 
-CONTACT. founder@aerohalo.io
+CONTACT. ben@arcifact.io
