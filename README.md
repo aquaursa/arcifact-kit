@@ -9,6 +9,15 @@ guess name observations that do not exist. This kit lets anyone
 score that behavior with the exact semantics used in Arcifact
 certificates, against banks whose integrity is hash-verified.
 
+## For evaluators, before anything else
+
+Running this kit sends nothing to us. `run_frontier.py` calls the
+endpoint YOU configure and writes responses to YOUR disk; the
+scorer runs locally; there is no telemetry, no account, and no
+network access beyond your own model endpoint. Vendors under
+confidentiality can therefore measure internal models freely.
+Only you decide whether a result is ever shared.
+
 ## Sixty seconds, your model, our banks
 
 ```
@@ -99,3 +108,9 @@ available from Arcifact Ltd.
 Research and internal evaluation use permitted. Training on, or
 distillation from, these banks or from published responses to them
 is not permitted. See `LICENSE.md`.
+
+## Status
+
+Patent pending: United Kingdom application GB2618664.3. Banks and
+scorer semantics are frozen under the license above; certification
+against these instruments is provided commercially by Arcifact Ltd.

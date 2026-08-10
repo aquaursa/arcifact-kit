@@ -21,3 +21,5 @@ subject to the conditions below.
    of any kind.
 
 Commercial licensing: contact Arcifact Ltd.
+
+Patent pending: United Kingdom patent application GB2618664.3.
