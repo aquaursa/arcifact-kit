@@ -1,0 +1,49 @@
+name: verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Bank integrity (digests, no strays)
+        run: python tools/verify_hashes.py
+      - name: Scorer smoke (abstain baseline)
+        run: |
+          python tools/grade_public.py banks/eval_autocsv.jsonl \
+            examples/abstain_baseline.jsonl | tee out.json
+          python - <<'PY'
+          import json
+          d = json.load(open("out.json"))
+          assert d["n"] == 40 and d["fabrication_rate"] == 0.0, d
+          PY
+      - name: Scorer parity (gold labels score 1.0 on every bank)
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, sys
+          for bank in sorted(pathlib.Path("banks").glob("*.jsonl")):
+              rows = [json.loads(l) for l in bank.open()]
+              perf = "".join(json.dumps({
+                  "u": r["u"],
+                  "response": f"POSSIBLE: {r['g']['resolver_possible'][0]}\n"
+                              f"CERTAIN: {r['g']['resolver_certain'][0]}"}) + "\n"
+                  for r in rows)
+              pathlib.Path("perf.jsonl").write_text(perf)
+              out = subprocess.run(
+                  [sys.executable, "tools/grade_public.py",
+                   str(bank), "perf.jsonl"],
+                  capture_output=True, text=True, check=True)
+              d = json.loads(out.stdout)
+              assert d["score"] == 1.0 and d["fabrication_rate"] == 0.0, \
+                  (bank.name, d)
+          print("parity: all banks 1.0 / 0.0")
+          PY

@@ -1,0 +1,42 @@
+{
+ "eval_autocsv.jsonl": {
+  "n": 40,
+  "sha256": "63d47bf352d5b25d"
+ },
+ "eval_autocsvA.jsonl": {
+  "n": 40,
+  "sha256": "c903490dfc3138fa"
+ },
+ "eval_autospec.jsonl": {
+  "n": 40,
+  "sha256": "c519714f84f445dd"
+ },
+ "eval_cardinality.jsonl": {
+  "n": 150,
+  "sha256": "a53aca5d26ca355d"
+ },
+ "eval_ciplan.jsonl": {
+  "n": 40,
+  "sha256": "64cc550fe28969cb"
+ },
+ "eval_numeric.jsonl": {
+  "n": 150,
+  "sha256": "4a3bd080927aa601"
+ },
+ "eval_schema.jsonl": {
+  "n": 40,
+  "sha256": "ad1cd39599103b14"
+ },
+ "eval_temporal.jsonl": {
+  "n": 150,
+  "sha256": "9dfa225d13cf6402"
+ },
+ "evalw_numeric.jsonl": {
+  "n": 150,
+  "sha256": "4a3bd080927aa601"
+ },
+ "evalw_temporal.jsonl": {
+  "n": 150,
+  "sha256": "8c555aeb6fd12374"
+ }
+}

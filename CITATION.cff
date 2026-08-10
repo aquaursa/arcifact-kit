@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: Arcifact Evidence Instrument Kit
+message: Cite the bank file names and digests from banks/BANKS_MANIFEST.json.
+type: dataset
+authors:
+  - name: Arcifact Ltd
+year: 2026
+url: https://github.com/aquaursa/arcifact-kit
+license-url: https://github.com/aquaursa/arcifact-kit/blob/main/LICENSE.md
