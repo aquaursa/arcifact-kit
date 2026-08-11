@@ -29,3 +29,5 @@ adversarial gating, stated in docs/PROTOCOL.md. Patent pending,
 GB2618664.3.
 
 CONTACT. ben@arcifact.io
+
+What counts as a pass is agreed before any pass is possible; the fee is fixed with the bars; you deal with the founder throughout, not a funnel. The pilot in full: https://arcifact.io/pilot

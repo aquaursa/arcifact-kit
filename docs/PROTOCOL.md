@@ -1,5 +1,7 @@
 # Measurement Protocol
 
+Preregistration is the product.
+
 This document states what an Arcifact number means. It is
 deliberately brief; the full protocol, including adversarial
 hardening procedures and construction methodology, is available to

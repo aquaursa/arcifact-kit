@@ -114,3 +114,7 @@ is not permitted. See `LICENSE.md`.
 Patent pending: United Kingdom application GB2618664.3. Banks and
 scorer semantics are frozen under the license above; certification
 against these instruments is provided commercially by Arcifact Ltd.
+
+## The invitation
+
+Distrust is the intended first response. Verify the digests, run your own model, read docs/PROTOCOL.md, and check every number against the bar registered before its run. The site is the short version: https://arcifact.io
