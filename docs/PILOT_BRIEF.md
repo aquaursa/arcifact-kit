@@ -22,7 +22,7 @@ with your approval; misses stay private unless you choose
 otherwise.
 
 WHY US. The measurement path is public and self-verifying
-(github.com/aquaursa/arcifact-kit: hash-frozen banks, a scorer
+(github.com/arcifact/arcifact-kit: hash-frozen banks, a scorer
 whose parity is re-proven by CI on every commit, a runner you can
 audit in one sitting). The method is preregistration and
 adversarial gating, stated in docs/PROTOCOL.md. Patent pending,

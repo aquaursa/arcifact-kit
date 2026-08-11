@@ -1,6 +1,6 @@
 # Arcifact Evidence Instrument Kit
 
-![verify](https://github.com/aquaursa/arcifact-kit/actions/workflows/verify.yml/badge.svg)
+![verify](https://github.com/arcifact/arcifact-kit/actions/workflows/verify.yml/badge.svg)
 
 Frozen, attack-gated evaluation banks for measuring one specific
 failure mode in language models: fabricated evidence. Each item asks
