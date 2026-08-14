@@ -118,3 +118,11 @@ against these instruments is provided commercially by Arcifact Ltd.
 ## The invitation
 
 Distrust is the intended first response. Verify the digests, run your own model, read docs/PROTOCOL.md, and check every number against the bar registered before its run. The site is the short version: https://arcifact.io
+
+## Witness
+`tools/witness_verify_light.py` verifies a Witness certificate
+against the workflow file it was issued for: source digest,
+witness chains, exhibit schedules. Forty lines, no engine, no
+network. Schema in `docs/WITNESS_CERTIFICATE.md`. Full-mode
+verification, which recounts the schedule space itself, is
+available under evaluation terms via arcifact.io.
