@@ -1,0 +1,34 @@
+name: syn
+'on': push
+jobs:
+  lint:
+    runs-on: u
+  build:
+    runs-on: u
+    needs: lint
+    strategy:
+      matrix:
+        os:
+        - a
+        - b
+  test-x:
+    runs-on: u
+    needs:
+    - build
+  test-y:
+    runs-on: u
+    needs:
+    - build
+  package:
+    runs-on: u
+    needs:
+    - test-x
+    - test-y
+  docs:
+    runs-on: u
+    needs: lint
+  publish:
+    runs-on: u
+    needs:
+    - package
+    - docs

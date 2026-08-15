@@ -11,12 +11,12 @@ jobs:
       matrix:
         python: ["3.10", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install test dependencies
-        run: pip install pytest pyyaml
+        run: pip install pytest pyyaml jsonschema pynacl
       - name: Bank integrity (digests, no strays)
         run: python tools/verify_hashes.py
       - name: Bank UID uniqueness
@@ -59,13 +59,23 @@ jobs:
               assert d["coverage"] == 1.0 and d["duplicate_n"] == 0, (bank.name, d)
           print("parity: all banks 1.0 / 0.0 under strict, full coverage")
           PY
+      - name: Required test fixtures present
+        run: |
+          test -f tests/fixtures/workflow_syn.yml
+          test -f tests/fixtures/cert_syn.json
+          test -f tests/fixtures/issuer_keys.json
+          echo "fixtures present"
       - name: Adversarial suite (attack the measurement)
         run: python -m pytest tests/ -q
-      - name: Certificate verifier (sample verifies, tamper fails)
+      - name: Certificate verifier (issued sample VALID end to end)
         run: |
           python tools/verify_certificate.py \
-            examples/sample_certificate.json --banks banks | tee cv.json
+            examples/sample_certificate.json \
+            --schema manifests/certificate.schema.v1.json \
+            --issuer-keys .well-known/arcifact-issuer-keys.json \
+            --banks banks --manifest-set examples/manifest_set.json \
+            --profile issued | tee cv.json
           python - <<'PY'
           import json
-          assert json.load(open("cv.json"))["GREEN"] is True
+          assert json.load(open("cv.json"))["verdict"] == "VALID"
           PY

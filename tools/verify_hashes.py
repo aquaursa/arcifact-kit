@@ -17,10 +17,10 @@ def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     failures = []
     for name, meta in sorted(manifest.items()):
-        digest = hashlib.sha256((ROOT / "banks" / name).read_bytes())
-        got = digest.hexdigest()[:16]
-        ok = got == meta["sha256"]
-        print(f"{'ok ' if ok else 'FAIL'} {name}  {got}")
+        got = hashlib.sha256(
+            (ROOT / "banks" / name).read_bytes()).hexdigest()
+        ok = got == meta["sha256"]  # full 64-hex comparison
+        print(f"{'ok ' if ok else 'FAIL'} {name}  {got[:16]}")
         if not ok:
             failures.append(name)
     present = {p.name for p in (ROOT / "banks").glob("*.jsonl")}

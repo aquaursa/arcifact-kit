@@ -1,0 +1,47 @@
+{
+ "schema": "witness/1",
+ "source_sha": "51674cfc9ad4547297f1c717d375e8668696d4f5cd76918aceb19f5cb838adce",
+ "jobs": 7,
+ "edges": 8,
+ "N": "10",
+ "artifacts": [
+  {
+   "type": "verdict",
+   "a": "test-x",
+   "b": "test-y",
+   "verdict": "UNRESOLVED",
+   "p": 0.5
+  },
+  {
+   "type": "exhibit",
+   "a": "test-x",
+   "b": "test-y",
+   "direction": "yes",
+   "order": [
+    "lint",
+    "build",
+    "docs",
+    "test-x",
+    "test-y",
+    "package",
+    "publish"
+   ]
+  },
+  {
+   "type": "exhibit",
+   "a": "test-x",
+   "b": "test-y",
+   "direction": "no",
+   "order": [
+    "lint",
+    "build",
+    "test-y",
+    "test-x",
+    "package",
+    "docs",
+    "publish"
+   ]
+  }
+ ],
+ "sha256": "900792297fe4549a27cbeb23d660587dad8f666f3856c440f770ff25e97888c9"
+}

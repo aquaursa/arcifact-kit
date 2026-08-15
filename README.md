@@ -135,3 +135,13 @@ for the core checks; signatures use PyNaCl if installed. A canonical
 example is in `examples/sample_certificate.json` and the schema is
 `manifests/certificate.schema.v1.json`. `--strict` scoring in
 `grade_public.py` is required for the numbers a certificate carries.
+
+## Issuer key and roots
+The Arcifact issuer public key is published at
+`.well-known/arcifact-issuer-keys.json` (also on arcifact.io). An
+issued certificate is signed with the corresponding offline key and
+carries a `key_id`; the verifier trusts only a key supplied through
+`--issuer-keys` or `--issuer-key`, never a key embedded in the
+certificate. Manifest roots are computed over an explicit
+`arcifact-manifest-set/1` member list (see
+`examples/manifest_set.json`), never by directory globbing.

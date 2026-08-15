@@ -1,0 +1,13 @@
+{
+ "schema": "arcifact-manifest-set/1",
+ "members": [
+  {
+   "path": "eval_autocsv.jsonl",
+   "sha256": "63d47bf352d5b25d2809d49928f5c3406d88f0586e4fd721d75099b306ad8c7d"
+  },
+  {
+   "path": "eval_autocsvA.jsonl",
+   "sha256": "c903490dfc3138fa6c2aa7eb32c7f4ae731e800e169bc55466f1bf14a5bb9919"
+  }
+ ]
+}

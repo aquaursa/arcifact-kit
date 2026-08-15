@@ -64,13 +64,16 @@ def grade(bank_path, resp_path):
         if not line.strip():
             continue
         row = json.loads(line)
+        if row["u"] in bank:
+            raise SystemExit(
+                f"error: duplicate uid in bank: {row['u']}")
         bank[row["u"]] = row
     n = 0
     correct = 0.0
     cells = collections.defaultdict(list)
     named = fab = 0
     seen = set()
-    submitted = duplicate = unknown = 0
+    submitted = duplicate = unknown = malformed = 0
     for line in pathlib.Path(resp_path).read_text().splitlines():
         if not line.strip():
             continue
@@ -88,6 +91,8 @@ def grade(bank_path, resp_path):
         g = it["g"]
         n += 1
         p, c = parse(r.get("response", ""))
+        if p is None and c is None:
+            malformed += 1
         gp = {canon(x) for x in g["resolver_possible"]}
         gc = {canon(x) for x in g["resolver_certain"]}
         # An observation is fabricated only if the gold itself never
@@ -114,6 +119,7 @@ def grade(bank_path, resp_path):
             "missing_n": missing,
             "duplicate_n": duplicate,
             "unknown_n": unknown,
+            "malformed_n": malformed,
             "coverage": round(n / max(bank_n, 1), 4),
             "score": round(correct / max(n, 1), 4),
             "cells": {k: round(sum(v) / len(v), 3)
@@ -136,6 +142,10 @@ def main(argv=None):
                     help="tolerate partial coverage (default; explicit "
                          "flag documents intent for --limit passes)")
     args = ap.parse_args(argv)
+    if args.strict and args.partial:
+        print("error: --strict and --partial are mutually exclusive",
+              file=sys.stderr)
+        return 2
     for path in (args.bank, args.responses):
         if not path.is_file():
             print(f"error: no such file: {path}", file=sys.stderr)

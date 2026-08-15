@@ -1,5 +1,6 @@
 {
  "schema_version": "arcifact-certificate/1",
+ "profile": "issued",
  "subject": "example-model-v1",
  "release": "2026-08",
  "banks": [
@@ -12,8 +13,7 @@
    "coverage": 1.0,
    "raw": {
     "cells": {
-     "neither": 1.0,
-     "possible_only": 0.5
+     "neither": 1.0
     }
    }
   },
@@ -26,8 +26,7 @@
    "coverage": 1.0,
    "raw": {
     "cells": {
-     "neither": 1.0,
-     "possible_only": 0.5
+     "neither": 1.0
     }
    }
   }
@@ -48,11 +47,17 @@
  ],
  "provenance": {
   "scorer_version": "grade_public/1.1",
-  "scorer_commit": "0000000",
-  "manifest_root": "5e71a854b587d9a186e93d9497dbbf58d84eecea6b1ce294285d876ef5048859"
+  "scorer_commit": "c3301b6",
+  "manifest_root": "2cd92e668dd8fff6b7a9d4cc6367352d9065008667e92ef890b9801bbbf276df"
  },
- "issued": "2026-08-14T00:00:00Z",
- "expires": "2027-08-14T00:00:00Z",
+ "issued": "2026-08-15T00:00:00Z",
+ "expires": "2027-08-15T00:00:00Z",
  "revocation": "https://arcifact.io/revocation.json",
- "sha256": "6a5cafe701b75a949d1f85a6220b89acde6a16e8311a724cddf80b2104df4c81"
+ "sha256": "262991584212399ccf4b7d6f0d1ad76eed3e310ec89d23e075df4d7fe8a69e2c",
+ "signature": {
+  "alg": "ed25519",
+  "key_id": "arcifact-issuer-2026-08",
+  "public_key": "37c0226f44af6848cec7ce245e5640243e972583aba2642ab5e45b5c9f7fa2eb",
+  "sig": "e88ac485c86f84fe24d2ed85f3f42202fca56ff749aab9d7d3bff00aa8eff53640f2c36077cea9494f74f44fade575ae67453357e78ecbe3699cb8db8de2a504"
+ }
 }
