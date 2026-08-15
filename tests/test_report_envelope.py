@@ -16,7 +16,7 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(HERE, "..", "tools", "verify_report.py")
 REC = os.path.join(HERE, "..", "examples", "reports",
-                   "gate-trunk.report.json")
+                   "example-gate.report.json")
 MODEL = os.path.join(HERE, "..", "examples", "reports",
                      "model-example.report.json")
 PY = sys.executable
@@ -52,7 +52,7 @@ def test_shipped_records_are_self_consistent():
 
 def test_tampered_payload_breaks_the_seal():
     r = base()
-    r["payload"]["ordering_counts"]["gate_first"] = "1"
+    r["payload"]["remediation"] = "tampered"
     v, out = _run(r)
     assert v == "INVALID" and "seal does not recompute" in out
 
@@ -60,14 +60,17 @@ def test_tampered_payload_breaks_the_seal():
 def test_resealed_but_incoherent_counts_still_fail():
     # re-sealing defeats the seal check, so semantics must catch it
     r = base()
-    r["payload"]["ordering_counts"]["gate_first"] = "99999"
+    r["payload"]["ordering_counts"] = {"total": "100",
+                                       "gate_first": "99999",
+                                       "after_fix": "50"}
     v, out = _run(_reseal(r))
     assert v == "INVALID" and "ordering counts incoherent" in out
 
 
 def test_job_cannot_be_both_covered_and_uncovered():
     r = base()
-    r["payload"]["covered_jobs"].append("action_tests")
+    dup = r["payload"]["uncovered_jobs"][0]["job"]
+    r["payload"]["covered_jobs"].append(dup)
     v, out = _run(_reseal(r))
     assert v == "INVALID" and "both covered and uncovered" in out
 
@@ -91,7 +94,8 @@ def test_unresolved_claim_must_name_what_settles_it():
 
 def test_unverified_assumption_must_say_how_to_check():
     r = base()
-    r["assumptions"][0].pop("how_to_verify")
+    r["assumptions"].append({"statement": "an unchecked premise",
+                             "verified": False})
     v, out = _run(_reseal(r))
     assert v == "INVALID" and "no way to check" in out
 
@@ -110,9 +114,7 @@ def test_requested_profile_is_a_floor_not_a_downgrade():
 
 def test_source_mismatch_is_a_failure_not_an_omission():
     os.makedirs("/tmp/_bad_src", exist_ok=True)
-    src = os.path.join(HERE, "..", "..", "site_pub",
-                       "manifests", "report.schema.v1.json")
-    open("/tmp/_bad_src/pr.yaml", "w").write("not the workflow\n")
+    open("/tmp/_bad_src/ci.yml", "w").write("not the workflow\n")
     v, out = _run(base(), ["--sources", "/tmp/_bad_src"])
     assert v == "INVALID" and "source mismatch" in out
 
