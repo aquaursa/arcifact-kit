@@ -53,8 +53,10 @@ def main(cert_path, wf_path):
     checks = {}
     # ---- schema / completeness ----
     schema_errs = []
-    if cert.get("schema") != "witness/1":
-        schema_errs.append("schema must be witness/1")
+    if cert.get("schema") not in ("arcifact-gate/1", "witness/1"):
+        schema_errs.append("schema must be arcifact-gate/1 "
+                           "(witness/1 accepted for records issued "
+                           "before the instrument was renamed)")
     arts = cert.get("artifacts")
     if not isinstance(arts, list) or len(arts) == 0:
         schema_errs.append("artifacts must be a non-empty list")
