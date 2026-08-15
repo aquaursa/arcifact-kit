@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Witness light verifier. Checks a Witness certificate against the
-workflow file it was issued for. Light verification establishes
-CONSISTENCY, not completeness of counting (full mode recounts the
+workflow file it was issued for. Light verification establishes CONSISTENCY of the supplied artifacts with the file. It does NOT verify the world count N, probabilities, or what-if counts; witness_recount.py recomputes those exactly (full mode recounts the
 schedule space under evaluation terms). It checks, in order:
   1. schema: schema tag, required fields, a non-empty artifacts list,
      known artifact types, and a well-formed workflow with no needs
@@ -99,14 +98,21 @@ def main(cert_path, wf_path):
                 ok = ok and ((pos[pa] < pos[pb])
                              == (a["direction"] == "yes"))
             fails += not ok
-    checks["artifact_fails"] = fails
-
-    checks["GREEN"] = (checks["schema"] == "pass"
-                       and checks["seal_match"]
-                       and checks["source_match"]
-                       and fails == 0)
-    print(json.dumps(checks, indent=1))
-    return 0 if checks["GREEN"] else 1
+    out = {
+        "schema": checks["schema"],
+        "certificate_seal": "pass" if checks["seal_match"] else "fail",
+        "source_binding": "pass" if checks["source_match"] else "fail",
+        "witness_chains_and_exhibits": ("pass" if fails == 0
+                                        else f"fail ({fails})"),
+        "world_count_N": "not_checked (use witness_recount.py)",
+        "probabilities": "not_checked (use witness_recount.py)",
+        "what_if_counts": "not_checked (use witness_recount.py)",
+    }
+    ok = (checks["schema"] == "pass" and checks["seal_match"]
+          and checks["source_match"] and fails == 0)
+    out["verdict"] = "CONSISTENT_LIGHT" if ok else "INCONSISTENT"
+    print(json.dumps(out, indent=1))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

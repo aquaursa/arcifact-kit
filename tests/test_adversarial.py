@@ -114,9 +114,11 @@ def test_bank_digests_match_manifest_full():
 def wit(cert, wf=FIX / "workflow_syn.yml"):
     r = run([TOOLS / "witness_verify_light.py", cert, wf])
     try:
-        return json.loads(r.stdout)
+        d = json.loads(r.stdout)
     except json.JSONDecodeError:
-        return {"GREEN": False}
+        return {"GREEN": False, "verdict": "INCONSISTENT"}
+    d["GREEN"] = (d.get("verdict") == "CONSISTENT_LIGHT")
+    return d
 
 
 def reseal_witness(c):
@@ -136,7 +138,7 @@ def test_tampered_seal_red(tmp_path):
     p = tmp_path / "c.json"
     p.write_text(json.dumps(c))
     r = wit(p)
-    assert r["GREEN"] is False and r["seal_match"] is False
+    assert r["GREEN"] is False and r["certificate_seal"] == "fail"
 
 
 def test_empty_artifacts_red(tmp_path):
@@ -196,10 +198,63 @@ def cv(cert, *extra):
         return {"verdict": "ERROR"}
 
 
+MDIR = BANKS  # manifest members are the bank files in the sample
+
+@pytest.mark.skipif(not HAVE_NACL, reason="pynacl required")
 def test_issued_sample_valid():
     d = cv(SAMPLE, "--issuer-keys", KEYS, "--banks", BANKS,
-           "--manifest-set", MSET, "--profile", "issued")
+           "--manifest-set", MSET, "--manifest-dir", MDIR,
+           "--revocation", FIX / "revocation.json", "--profile",
+           "issued")
     assert d["verdict"] == "VALID"
+
+def test_issued_without_manifest_or_revocation_incomplete():
+    d = cv(SAMPLE, "--issuer-keys", KEYS, "--banks", BANKS,
+           "--profile", "issued")
+    assert d["verdict"] == "INCOMPLETE"
+
+def test_profile_downgrade_blocked():
+    # an issued cert with signature stripped, verified as report,
+    # must not read as a clean report
+    import json as _j
+    c = _j.loads(SAMPLE.read_text()); c.pop("signature", None)
+    p = FIX.parent / "_dg.json"; p.write_text(_j.dumps(c))
+    d = cv(p, "--profile", "report")
+    p.unlink(missing_ok=True)
+    assert d["verdict"] != "VALID"
+    assert d["matrix"]["effective_profile"] == "issued"
+
+def test_banana_date_invalid(tmp_path):
+    import json as _j, hashlib as _h
+    c = _j.loads(SAMPLE.read_text())
+    c["thresholds"][0]["registered_at"] = "banana"
+    b = {k: v for k, v in c.items() if k not in ("sha256","signature")}
+    c["sha256"] = _h.sha256(canon(b).encode()).hexdigest()
+    c.pop("signature", None)
+    p = tmp_path / "c.json"; p.write_text(_j.dumps(c))
+    assert cv(p)["verdict"] == "INVALID"
+
+def test_manifest_member_byte_mismatch_fails(tmp_path):
+    # a manifest-dir whose file bytes differ from the index digest
+    import json as _j
+    bad = tmp_path / "banks"; bad.mkdir()
+    idx = _j.loads(MSET.read_text())
+    for m in idx["members"]:
+        (bad / m["path"]).write_text("tampered")
+    d = cv(SAMPLE, "--issuer-keys", KEYS, "--banks", BANKS,
+           "--manifest-set", MSET, "--manifest-dir", bad,
+           "--profile", "issued")
+    assert d["matrix"]["manifest_set"] == "fail"
+
+def test_unsigned_revocation_not_valid_issued(tmp_path):
+    import json as _j
+    rev = tmp_path / "rev.json"
+    rev.write_text(_j.dumps({"revoked": []}))  # legacy unsigned
+    d = cv(SAMPLE, "--issuer-keys", KEYS, "--banks", BANKS,
+           "--manifest-set", MSET, "--manifest-dir", MDIR,
+           "--revocation", rev, "--profile", "issued")
+    # unsigned revocation is not "checked_not_revoked" -> not VALID
+    assert d["verdict"] != "VALID"
 
 
 def test_malformed_cert_invalid(tmp_path):
@@ -207,6 +262,7 @@ def test_malformed_cert_invalid(tmp_path):
     c["backdoor"] = True
     c["banks"][0]["n"] = "not-int"
     c["stance"] = "not-object"
+    c.pop("signature", None)
     body = {k: v for k, v in c.items() if k != "sha256"}
     c["sha256"] = hashlib.sha256(canon(body).encode()).hexdigest()
     p = tmp_path / "c.json"

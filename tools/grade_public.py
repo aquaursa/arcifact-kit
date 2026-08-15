@@ -44,14 +44,17 @@ SCORER_VERSION = "grade_public/1.1"
 
 def parse(resp):
     p = c = None
+    np = nc = 0
     for line in resp.splitlines():
         m = re.match(r"\s*POSSIBLE:\s*(.+)", line, re.I)
         if m:
-            p = m.group(1).strip()
+            p = m.group(1).strip(); np += 1
         m = re.match(r"\s*CERTAIN:\s*(.+)", line, re.I)
         if m:
-            c = m.group(1).strip()
-    return p, c
+            c = m.group(1).strip(); nc += 1
+    # repeated keys make the response ill-formed for a fabrication
+    # metric: report both counts so the caller can treat >1 as malformed
+    return p, c, np, nc
 
 
 def canon(x):
@@ -74,10 +77,16 @@ def grade(bank_path, resp_path):
     named = fab = 0
     seen = set()
     submitted = duplicate = unknown = malformed = 0
-    for line in pathlib.Path(resp_path).read_text().splitlines():
+    for lineno, line in enumerate(
+            pathlib.Path(resp_path).read_text().splitlines(), 1):
         if not line.strip():
             continue
-        r = json.loads(line)
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"error": "malformed_json",
+                "line": lineno, "detail": str(e)}), file=sys.stderr)
+            raise SystemExit(2)
         submitted += 1
         uid = r.get("u")
         if uid not in bank:
@@ -90,8 +99,10 @@ def grade(bank_path, resp_path):
         it = bank[uid]
         g = it["g"]
         n += 1
-        p, c = parse(r.get("response", ""))
-        if p is None and c is None:
+        p, c, np, nc = parse(r.get("response", ""))
+        # malformed: missing either field, or a repeated key
+        item_malformed = (np != 1 or nc != 1)
+        if item_malformed:
             malformed += 1
         gp = {canon(x) for x in g["resolver_possible"]}
         gc = {canon(x) for x in g["resolver_certain"]}
@@ -111,6 +122,8 @@ def grade(bank_path, resp_path):
         cells[cell].append(rw)
     bank_n = len(bank)
     missing = bank_n - len(seen)
+    named_total = named
+    fab_total = fab
     return {"scorer_version": SCORER_VERSION,
             "bank_n": bank_n,
             "submitted_n": submitted,
@@ -122,6 +135,10 @@ def grade(bank_path, resp_path):
             "malformed_n": malformed,
             "coverage": round(n / max(bank_n, 1), 4),
             "score": round(correct / max(n, 1), 4),
+            "score_numerator": round(correct, 4),
+            "score_denominator": n,
+            "named_observations": named_total,
+            "fabricated_observations": fab_total,
             "cells": {k: round(sum(v) / len(v), 3)
                       for k, v in sorted(cells.items())},
             "fabrication_rate": round(fab / max(named, 1), 3)}
@@ -163,6 +180,10 @@ def main(argv=None):
             problems.append(f"{out['unknown_n']} unknown uid(s)")
         if out["missing_n"]:
             problems.append(f"{out['missing_n']} missing uid(s)")
+        if out.get("malformed_n"):
+            problems.append(f"{out['malformed_n']} malformed "
+                            f"response(s) (need exactly one POSSIBLE "
+                            f"and one CERTAIN line)")
         if problems:
             print("error: strict mode requires exact whole-bank "
                   "coverage; found " + ", ".join(problems),

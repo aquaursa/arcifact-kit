@@ -7,34 +7,36 @@
   {
    "bank": "eval_autocsv.jsonl",
    "bank_sha256": "63d47bf352d5b25d2809d49928f5c3406d88f0586e4fd721d75099b306ad8c7d",
-   "score": 0.94,
+   "score": 0.95,
    "fabrication_rate": 0.0,
    "n": 40,
    "coverage": 1.0,
    "raw": {
-    "cells": {
-     "neither": 1.0
-    }
+    "score_numerator": 38,
+    "score_denominator": 40,
+    "named_observations": 20,
+    "fabricated_observations": 0
    }
   },
   {
    "bank": "eval_autocsvA.jsonl",
    "bank_sha256": "c903490dfc3138fa6c2aa7eb32c7f4ae731e800e169bc55466f1bf14a5bb9919",
-   "score": 0.94,
+   "score": 0.95,
    "fabrication_rate": 0.0,
    "n": 40,
    "coverage": 1.0,
    "raw": {
-    "cells": {
-     "neither": 1.0
-    }
+    "score_numerator": 38,
+    "score_denominator": 40,
+    "named_observations": 20,
+    "fabricated_observations": 0
    }
   }
  ],
  "envelope": "H<=12, zero-shot, frozen banks",
  "stance": {
-  "answers": 18,
-  "entitled_refusals": 20,
+  "answers": 38,
+  "entitled_refusals": 40,
   "errors": 2
  },
  "fabrication_rate": 0.0,
@@ -45,19 +47,25 @@
    "registered_at": "2026-08-01T00:00:00Z"
   }
  ],
+ "bars": {
+  "passed": true,
+  "details": "fabrication 0.0 vs bar 0.02"
+ },
  "provenance": {
   "scorer_version": "grade_public/1.1",
-  "scorer_commit": "c3301b6",
-  "manifest_root": "2cd92e668dd8fff6b7a9d4cc6367352d9065008667e92ef890b9801bbbf276df"
+  "scorer_commit": "61e10e6",
+  "manifest_root": "2cd92e668dd8fff6b7a9d4cc6367352d9065008667e92ef890b9801bbbf276df",
+  "scorer_strict": true,
+  "canonicalization": "arcifact-canon/1"
  },
  "issued": "2026-08-15T00:00:00Z",
  "expires": "2027-08-15T00:00:00Z",
  "revocation": "https://arcifact.io/revocation.json",
- "sha256": "262991584212399ccf4b7d6f0d1ad76eed3e310ec89d23e075df4d7fe8a69e2c",
+ "sha256": "2a0966195088219175aca6672adc44d45ed99ad1046df9866488943c4b6868b2",
  "signature": {
   "alg": "ed25519",
   "key_id": "arcifact-issuer-2026-08",
   "public_key": "37c0226f44af6848cec7ce245e5640243e972583aba2642ab5e45b5c9f7fa2eb",
-  "sig": "e88ac485c86f84fe24d2ed85f3f42202fca56ff749aab9d7d3bff00aa8eff53640f2c36077cea9494f74f44fade575ae67453357e78ecbe3699cb8db8de2a504"
+  "sig": "40fb61999480910f6b2a422270f3330e0d82c7c99d9cdb2d284421f6349a6b2876d643b70f3b8be3d113af76ba7edef1c635ace602638e040141a42c5c7a3c09"
  }
 }
