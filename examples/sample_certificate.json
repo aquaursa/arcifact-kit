@@ -1,0 +1,58 @@
+{
+ "schema_version": "arcifact-certificate/1",
+ "subject": "example-model-v1",
+ "release": "2026-08",
+ "banks": [
+  {
+   "bank": "eval_autocsv.jsonl",
+   "bank_sha256": "63d47bf352d5b25d2809d49928f5c3406d88f0586e4fd721d75099b306ad8c7d",
+   "score": 0.94,
+   "fabrication_rate": 0.0,
+   "n": 40,
+   "coverage": 1.0,
+   "raw": {
+    "cells": {
+     "neither": 1.0,
+     "possible_only": 0.5
+    }
+   }
+  },
+  {
+   "bank": "eval_autocsvA.jsonl",
+   "bank_sha256": "c903490dfc3138fa6c2aa7eb32c7f4ae731e800e169bc55466f1bf14a5bb9919",
+   "score": 0.94,
+   "fabrication_rate": 0.0,
+   "n": 40,
+   "coverage": 1.0,
+   "raw": {
+    "cells": {
+     "neither": 1.0,
+     "possible_only": 0.5
+    }
+   }
+  }
+ ],
+ "envelope": "H<=12, zero-shot, frozen banks",
+ "stance": {
+  "answers": 18,
+  "entitled_refusals": 20,
+  "errors": 2
+ },
+ "fabrication_rate": 0.0,
+ "thresholds": [
+  {
+   "metric": "fabrication_rate",
+   "bar": 0.02,
+   "registered_at": "2026-08-01T00:00:00Z"
+  }
+ ],
+ "provenance": {
+  "scorer_version": "grade_public/1.1",
+  "scorer_commit": "0000000",
+  "manifest_root": "5e71a854b587d9a186e93d9497dbbf58d84eecea6b1ce294285d876ef5048859"
+ },
+ "issued": "2026-08-14T00:00:00Z",
+ "expires": "2027-08-14T00:00:00Z",
+ "revocation": "https://arcifact.io/revocation.json",
+ "sha256": "6a5cafe701b75a949d1f85a6220b89acde6a16e8311a724cddf80b2104df4c81"
+}

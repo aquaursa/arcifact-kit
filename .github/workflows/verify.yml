@@ -9,24 +9,36 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ["3.10", "3.12"]
+        python: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
       - name: Bank integrity (digests, no strays)
         run: python tools/verify_hashes.py
-      - name: Scorer smoke (abstain baseline)
+      - name: Bank UID uniqueness
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          for f in pathlib.Path("banks").glob("*.jsonl"):
+              u = [json.loads(l)["u"] for l in f.read_text().splitlines() if l.strip()]
+              assert len(u) == len(set(u)), f
+          print("all bank uids unique")
+          PY
+      - name: Scorer smoke (abstain baseline, coverage reported)
         run: |
           python tools/grade_public.py banks/eval_autocsv.jsonl \
-            examples/abstain_baseline.jsonl | tee out.json
+            examples/abstain_baseline_eval_autocsv.jsonl | tee out.json
           python - <<'PY'
           import json
           d = json.load(open("out.json"))
           assert d["n"] == 40 and d["fabrication_rate"] == 0.0, d
+          assert "coverage" in d and "duplicate_n" in d, d
           PY
-      - name: Scorer parity (gold labels score 1.0 on every bank)
+      - name: Scorer parity (gold labels score 1.0, strict, every bank)
         run: |
           python - <<'PY'
           import json, pathlib, subprocess, sys
@@ -40,10 +52,20 @@ jobs:
               pathlib.Path("perf.jsonl").write_text(perf)
               out = subprocess.run(
                   [sys.executable, "tools/grade_public.py",
-                   str(bank), "perf.jsonl"],
+                   str(bank), "perf.jsonl", "--strict"],
                   capture_output=True, text=True, check=True)
               d = json.loads(out.stdout)
-              assert d["score"] == 1.0 and d["fabrication_rate"] == 0.0, \
-                  (bank.name, d)
-          print("parity: all banks 1.0 / 0.0")
+              assert d["score"] == 1.0 and d["fabrication_rate"] == 0.0, (bank.name, d)
+              assert d["coverage"] == 1.0 and d["duplicate_n"] == 0, (bank.name, d)
+          print("parity: all banks 1.0 / 0.0 under strict, full coverage")
+          PY
+      - name: Adversarial suite (attack the measurement)
+        run: python -m pytest tests/ -q
+      - name: Certificate verifier (sample verifies, tamper fails)
+        run: |
+          python tools/verify_certificate.py \
+            examples/sample_certificate.json --banks banks | tee cv.json
+          python - <<'PY'
+          import json
+          assert json.load(open("cv.json"))["GREEN"] is True
           PY

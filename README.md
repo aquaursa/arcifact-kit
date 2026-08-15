@@ -34,7 +34,7 @@ fabrication 0.000 on the same bank (provenance in
 
 ## Quick start
 
-No dependencies beyond Python 3.10+.
+Core evaluation and scoring tools require only Python 3.10+. Witness verification additionally requires PyYAML; the generic certificate verifier optionally uses PyNaCl to check signatures.
 
 ```
 python tools/verify_hashes.py
@@ -47,7 +47,7 @@ Responses are JSONL, one object per bank item:
 {"u": "<item uid>", "response": "POSSIBLE: <label or NONE>\nCERTAIN: <label or NONE>"}
 ```
 
-`examples/abstain_baseline.jsonl` is a runnable reference input; the
+`examples/abstain_baseline_eval_autocsv.jsonl` is a runnable reference input; the
 scorer prints per-cell accuracy and the fabrication rate (answers
 naming observations absent from the item menu).
 
@@ -126,3 +126,12 @@ witness chains, exhibit schedules. Forty lines, no engine, no
 network. Schema in `docs/WITNESS_CERTIFICATE.md`. Full-mode
 verification, which recounts the schedule space itself, is
 available under evaluation terms via arcifact.io.
+
+## Certificate verification
+`tools/verify_certificate.py` verifies an Arcifact Evidence
+Certificate offline: schema, self-seal, optional Ed25519 signature,
+bank digests, manifest root, and revocation. Standard library only
+for the core checks; signatures use PyNaCl if installed. A canonical
+example is in `examples/sample_certificate.json` and the schema is
+`manifests/certificate.schema.v1.json`. `--strict` scoring in
+`grade_public.py` is required for the numbers a certificate carries.

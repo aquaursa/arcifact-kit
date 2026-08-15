@@ -3,16 +3,32 @@
 
 Usage:
     python grade_public.py BANK.jsonl RESPONSES.jsonl [--pretty]
+                                                      [--strict]
 
 RESPONSES.jsonl carries one object per item:
     {"u": "<item uid>", "response": "POSSIBLE: <label or NONE>\nCERTAIN: <label or NONE>"}
 
 Output is a JSON object with fields:
-    n                  items scored (uids matched to the bank)
-    score              mean of 0.5*[POSSIBLE correct] + 0.5*[CERTAIN correct]
-    cells              per-cell means over both/possible_only/neither items
+    bank_n             items in the bank
+    submitted_n        response rows read
+    n                  items scored (unique uids matched to the bank)
+    unique_matched_n   same as n; unique bank uids answered
+    missing_n          bank uids with no response
+    duplicate_n        response rows repeating an already-seen uid
+    unknown_n          response rows whose uid is not in the bank
+    coverage           unique_matched_n / bank_n
+    score              mean of 0.5*[POSSIBLE correct]+0.5*[CERTAIN correct]
+    cells              per-cell means over both/possible_only/neither
     fabrication_rate   share of named answers that name an observation
                        the gold never names (menu or resolver labels)
+
+Two contracts share this scorer. Exploratory scoring (--partial,
+the default) tolerates partial coverage for quick --limit passes.
+Certificate scoring (--strict) refuses to emit a score unless the
+submission covers the whole bank exactly once: any duplicate,
+unknown, or missing uid is fatal. Duplicate uids are always
+reported and are always fatal under --strict, because repeating an
+easy item is the simplest way to inflate n.
 
 Copyright (c) 2026 Arcifact Ltd. Arcifact Evaluation License v1.0.
 """
@@ -22,6 +38,8 @@ import json
 import pathlib
 import re
 import sys
+
+SCORER_VERSION = "grade_public/1.1"
 
 
 def parse(resp):
@@ -43,19 +61,30 @@ def canon(x):
 def grade(bank_path, resp_path):
     bank = {}
     for line in pathlib.Path(bank_path).read_text().splitlines():
+        if not line.strip():
+            continue
         row = json.loads(line)
         bank[row["u"]] = row
     n = 0
     correct = 0.0
     cells = collections.defaultdict(list)
     named = fab = 0
+    seen = set()
+    submitted = duplicate = unknown = 0
     for line in pathlib.Path(resp_path).read_text().splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
-        it = bank.get(r.get("u"))
-        if not it:
+        submitted += 1
+        uid = r.get("u")
+        if uid not in bank:
+            unknown += 1
             continue
+        if uid in seen:
+            duplicate += 1
+            continue
+        seen.add(uid)
+        it = bank[uid]
         g = it["g"]
         n += 1
         p, c = parse(r.get("response", ""))
@@ -75,7 +104,18 @@ def grade(bank_path, resp_path):
                 "possible_only" if g["resolver_possible"] != ["NONE"]
                 else "neither")
         cells[cell].append(rw)
-    return {"n": n, "score": round(correct / max(n, 1), 4),
+    bank_n = len(bank)
+    missing = bank_n - len(seen)
+    return {"scorer_version": SCORER_VERSION,
+            "bank_n": bank_n,
+            "submitted_n": submitted,
+            "n": n,
+            "unique_matched_n": n,
+            "missing_n": missing,
+            "duplicate_n": duplicate,
+            "unknown_n": unknown,
+            "coverage": round(n / max(bank_n, 1), 4),
+            "score": round(correct / max(n, 1), 4),
             "cells": {k: round(sum(v) / len(v), 3)
                       for k, v in sorted(cells.items())},
             "fabrication_rate": round(fab / max(named, 1), 3)}
@@ -88,6 +128,13 @@ def main(argv=None):
     ap.add_argument("responses", type=pathlib.Path)
     ap.add_argument("--pretty", action="store_true",
                     help="indent the JSON output")
+    ap.add_argument("--strict", action="store_true",
+                    help="require exact whole-bank coverage; any "
+                         "duplicate, unknown, or missing uid is fatal "
+                         "(use for certificate issuance)")
+    ap.add_argument("--partial", action="store_true",
+                    help="tolerate partial coverage (default; explicit "
+                         "flag documents intent for --limit passes)")
     args = ap.parse_args(argv)
     for path in (args.bank, args.responses):
         if not path.is_file():
@@ -98,6 +145,23 @@ def main(argv=None):
         print("error: no response uids matched the bank",
               file=sys.stderr)
         return 2
+    if args.strict:
+        problems = []
+        if out["duplicate_n"]:
+            problems.append(f"{out['duplicate_n']} duplicate uid(s)")
+        if out["unknown_n"]:
+            problems.append(f"{out['unknown_n']} unknown uid(s)")
+        if out["missing_n"]:
+            problems.append(f"{out['missing_n']} missing uid(s)")
+        if problems:
+            print("error: strict mode requires exact whole-bank "
+                  "coverage; found " + ", ".join(problems),
+                  file=sys.stderr)
+            print(json.dumps(out, indent=1 if args.pretty else None))
+            return 3
+        out["strict"] = True
+    # Duplicates are always reported; under partial they are not fatal
+    # but they are never counted toward n (first occurrence wins).
     print(json.dumps(out, indent=1 if args.pretty else None))
     return 0
 
