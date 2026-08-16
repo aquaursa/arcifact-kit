@@ -31,13 +31,26 @@ mistakes self-consistency for authenticity.
 - That the model never saw the bank or its source corpus.
 - That the public response file is the one originally scored.
 These are properties of the ISSUANCE process, not of a static
-certificate. They are addressed by the append-only run-commitment
-record on the roadmap, which binds bank, threshold, scorer bytes,
-run configuration, response digest, result, certificate id, issuer
-signature and revocation state. Until that record is public, the
-deliverable is described as an Arcifact evidence report with a
-reproducible public scoring bundle, not a cryptographic certificate
-authority.
+certificate. They are addressed by the append-only commitment record,
+which is now public at https://arcifact.io/commitments.json with a
+verifier at tools/verify_commitments.py. Each entry commits to a fact
+before the thing it constrains happens and carries the hash of the
+entry before it; the head is signed.
+
+Two limits of that record, stated here rather than left to be
+inferred:
+- It proves nothing about anything before its first entry. Runs and
+  bars predating the log are NOT strengthened by it.
+- The timestamps in it are the issuer's assertion. A signed chain can
+  be produced all at once. What makes backdating hard is the anchor:
+  each head is committed to a public git repository, so it appears in
+  a third-party-hosted commit with a server-side date. Date a head
+  with `git log -S<head> -- commitments.json`, which does not involve
+  Arcifact.
+
+Until independent reproduction exists, the deliverable is still
+described as an Arcifact evidence report with a reproducible public
+scoring bundle, not a cryptographic certificate authority.
 
 ## Profiles
 - draft: seal + schema only; no issuance claim.
