@@ -90,6 +90,20 @@ def check_envelope(rec, res):
         res.fail(f"schema must be arcifact-report/1, got "
                  f"{rec.get('schema')!r}")
         return
+    if not os.path.exists(SCHEMA):
+        # a schema we cannot read is a check we could not perform, not a
+        # check that failed. Saying INVALID here would punish every
+        # recipient who unpacks the record on its own.
+        res.incomplete("envelope schema not found beside the verifier: "
+                       "structure checked, schema conformance not. Fetch "
+                       "https://arcifact.io/manifests/report.schema.v1.json "
+                       "to complete this check")
+        for k in ("instrument", "instrument_version", "profile", "subject",
+                  "source_bindings", "claims", "envelope", "assumptions",
+                  "provenance", "issued", "payload", "sha256"):
+            if k not in rec:
+                res.fail(f"required envelope field missing: {k}")
+        return
     try:
         import jsonschema
         from jsonschema import FormatChecker
@@ -254,11 +268,64 @@ def check_issued(rec, res, issuer_keys):
         res.fail("issued profile requires a revocation pointer")
 
 
+
+def check_analyser_commitment(rec, res, commitments_path):
+    """Was the instrument that produced this record committed BEFORE the
+    record was issued?
+
+    A result is only as good as the instrument behind it. An instrument
+    that can be edited between the bar being set and the result being
+    published is not an instrument, it is an opinion with a hash. So the
+    analyser's exact bytes are committed to the public append-only log,
+    and this check refuses a record whose analyser was never committed,
+    or was committed only after the record claims to have been issued.
+
+    The rule binds the issuer: they cannot alter what the analyser
+    concludes and reissue under the old reputation, because the digest
+    would not match any prior entry."""
+    tools = ((rec.get("provenance") or {}).get("tool_digests")
+             or (rec.get("payload") or {}).get("analyser") or {})
+    if not tools:
+        res.incomplete("record carries no analyser digests: the "
+                       "instrument behind it cannot be checked")
+        return
+    if not commitments_path:
+        res.incomplete(f"{len(tools)} analyser digest(s) not checked: "
+                       "pass --commitments with the published log")
+        return
+    try:
+        log = json.load(open(commitments_path))
+    except Exception as exc:
+        res.fail(f"cannot read commitment log: {str(exc)[:60]}")
+        return
+    entries = log.get("entries") or []
+    by_digest = {}
+    for e in entries:
+        if e.get("digest"):
+            by_digest.setdefault(e["digest"], e)
+    issued = _parse_dt(rec.get("issued"))
+    for name, dig in tools.items():
+        e = by_digest.get(dig)
+        if not e:
+            res.fail(f"analyser {name} (digest {dig[:12]}) was never "
+                     f"committed to the log: this record cannot be "
+                     f"relied on as an issued result")
+            continue
+        ts = _parse_dt(e.get("utc"))
+        if issued and ts and ts > issued:
+            res.fail(f"analyser {name} was committed AFTER the record "
+                     f"was issued ({e.get('utc')} > {rec.get('issued')})")
+        else:
+            res.note(f"analyser {name} committed at entry "
+                     f"{e.get('n')} on {e.get('utc')}")
+
+
 DISPATCH = {"gate": check_gate_payload,
             "model-evidence": check_model_payload}
 
 
-def verify(path, sources_dir=None, want_profile=None, issuer_keys=None):
+def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
+           commitments=None):
     res = Result()
     try:
         rec = json.load(open(path))
@@ -284,6 +351,7 @@ def verify(path, sources_dir=None, want_profile=None, issuer_keys=None):
         handler(rec, res)
 
     check_issued(rec, res, issuer_keys)
+    check_analyser_commitment(rec, res, commitments)
 
     profile = rec.get("profile", "draft")
     if want_profile:
@@ -335,8 +403,12 @@ def main():
                     help="minimum profile you require")
     ap.add_argument("--issuer-keys", help="published issuer key file, "
                                           "obtained out of band")
+    ap.add_argument("--commitments", help="the published append-only "
+                    "commitment log, to check that the analyser behind "
+                    "this record was committed before it was issued")
     a = ap.parse_args()
-    return verify(a.record, a.sources, a.profile, a.issuer_keys)
+    return verify(a.record, a.sources, a.profile, a.issuer_keys,
+                  a.commitments)
 
 
 if __name__ == "__main__":
