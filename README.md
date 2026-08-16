@@ -1,13 +1,24 @@
-# Arcifact Evidence Instrument Kit
+# Arcifact kit
 
 ![verify](https://github.com/arcifact/arcifact-kit/actions/workflows/verify.yml/badge.svg)
 
-Frozen, attack-gated evaluation banks for measuring one specific
-failure mode in language models: fabricated evidence. Each item asks
-which single observation could settle a stated question. Models that
-guess name observations that do not exist. This kit lets anyone
-score that behavior with the exact semantics used in Arcifact
-certificates, against banks whose integrity is hash-verified.
+Verifiers, schemas and frozen instruments for the two things Arcifact
+measures. Everything here exists so you can check a result without
+taking my word for it.
+
+**Arcifact Gate** looks at a GitHub Actions workflow and finds the ways
+a required check can go green without the validation behind it
+succeeding: a job missing from the gate's needs, a result the gate
+never inspects, a conditional validator outside the closure, or a
+failure step suppressed because the job that produces its guard did not
+run. A worked sample, with the record, the workflow and three verifiers,
+is at https://arcifact.io/gate
+
+**Model Evidence** measures one specific failure in language models:
+fabricated evidence. Each item asks which single observation would
+settle a stated question, and a model that guesses names an observation
+that does not exist. The banks are frozen and hash-verified, and the
+scorer here is the one used for published results.
 
 ## For evaluators, before anything else
 
@@ -34,7 +45,21 @@ fabrication 0.000 on the same bank (provenance in
 
 ## Quick start
 
-Core evaluation and scoring tools require only Python 3.10+. Witness verification additionally requires PyYAML; the generic certificate verifier optionally uses PyNaCl to check signatures.
+Python 3.10 or later is enough to score a model. Beyond that each
+dependency unlocks one specific check, and every verifier says which
+checks it could not perform without them rather than skipping quietly:
+
+| you want to | you also need |
+|---|---|
+| read a workflow (Gate verifiers) | `pyyaml` |
+| run a gate's own predicate (`--exercise`) | `jq` |
+| validate a record against the envelope schema | `jsonschema`, `rfc3339-validator` |
+| check an issuer signature | `pynacl` |
+
+`pip install -r requirements.txt` installs the lot, pinned. Without
+`pynacl` a requested signature check returns INCOMPLETE and a non-zero
+exit; it will never report something as authentic that it could not
+check.
 
 ```
 python tools/verify_hashes.py
@@ -119,13 +144,31 @@ against these instruments is provided commercially by Arcifact Ltd.
 
 Distrust is the intended first response. Verify the digests, run your own model, read docs/PROTOCOL.md, and check every number against the bar registered before its run. The site is the short version: https://arcifact.io
 
-## Witness
-`tools/witness_verify_light.py` verifies a Witness certificate
-against the workflow file it was issued for: source digest,
-witness chains, exhibit schedules. Forty lines, no engine, no
-network. Schema in `docs/WITNESS_CERTIFICATE.md`. Full-mode
-verification, which recounts the schedule space itself, is
-available under evaluation terms via arcifact.io.
+## Gate records
+
+The instrument was called Witness during development. It is now
+Arcifact Gate, because an established CNCF-ecosystem project already
+owns that name in this space. Some file names still carry the old one;
+the formats are unchanged.
+
+`tools/witness_verify_light.py` checks a Gate record against the
+workflow it was issued for: source digest, dependency chains, exhibit
+schedules. No engine, no network.
+
+`tools/witness_recount.py` goes further and independently recounts the
+schedule space from the workflow alone, reproducing the ordering
+figures a record claims. This used to be described here as private. It
+is not; it is in this repository and it is what the published samples
+are checked with.
+
+`tools/verify_report.py` checks the record envelope, and with
+`--commitments` it refuses a record whose analyser was never committed
+to the public log, or was committed after the record claims to have
+been issued.
+
+`tools/verify_commitments.py` checks the append-only commitment log
+itself: entry hashes, the chain back to genesis, and the head
+signature.
 
 ## Certificate verification
 `tools/verify_certificate.py` verifies an Arcifact Evidence
