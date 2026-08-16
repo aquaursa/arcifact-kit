@@ -1,4 +1,24 @@
 # Changelog
+
+## v1.2.1
+
+Fixes the public verification workflow, which had been red since v1.2.0.
+
+v1.2.0 tightened the issued profile to require a checked revocation
+state and verified manifest members. The CI step that asserts the
+sample certificate verifies VALID end to end was not updated to supply
+`--revocation` or `--manifest-dir`, so it returned INCOMPLETE and the
+assertion failed. The verifier was correct throughout; the invocation
+was not.
+
+v1.2.0 is superseded. Nothing about the certificate format, the
+verifier semantics or any published result changes.
+
+A note on why this mattered more than an ordinary CI break: Arcifact
+sells assurance that a green check means what it claims, while its own
+public verification badge was red. That is the failure this project
+exists to detect, and it went unnoticed for a week.
+
 ## 1.1.0 - 2026-08-15
 Hardened the verification boundary in response to external adversarial
 review. Certificate schema compatibility: v1 (arcifact-certificate/1).

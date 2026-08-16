@@ -79,6 +79,8 @@ jobs:
             --schema manifests/certificate.schema.v1.json \
             --issuer-keys .well-known/arcifact-issuer-keys.json \
             --banks banks --manifest-set examples/manifest_set.json \
+            --manifest-dir banks \
+            --revocation tests/fixtures/revocation.json \
             --profile issued | tee cv.json
           python - <<'PY'
           import json
