@@ -173,7 +173,7 @@ def main():
               "issuer signed, in")
         print("                   order and unaltered. Timestamps remain the "
               "issuer's word:")
-        print("                   date the head against public git history.")
+        print("                   ")
     elif verdict == "SELF_CONSISTENT_CHAIN":
         print("                   The chain is internally consistent. NOTHING "
               "is claimed about")

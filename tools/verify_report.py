@@ -334,40 +334,118 @@ def check_anchor(rec, res, online=False):
                  "confirm the event exists, names this commit and precedes "
                  "issuance, rerun with --online")
         return
-    try:
-        import urllib.request
-        repo = str(a.get("repository", "")).replace(
-            "https://github.com/", "")
-        url = f"https://api.github.com/repos/{repo}/events?per_page=100"
+    # Finding a real PushEvent proves nothing on its own. A reviewer
+    # swapped in an older genuine event whose commit carried a DIFFERENT
+    # 15-entry log, and this verifier still said chronology CHECKED. So
+    # the online path now binds the whole chain: event -> commit -> the
+    # log at that commit -> its signed head -> the head this record
+    # declares. Any break is a FAILURE, not a note.
+    import urllib.request
+    import base64
+
+    def _get(url):
         req = urllib.request.Request(url, headers={
             "Accept": "application/vnd.github+json"})
-        events = json.load(urllib.request.urlopen(req, timeout=30))
+        tok = os.environ.get("GH_TOKEN")
+        if tok:
+            req.add_header("Authorization", f"Bearer {tok}")
+        return json.load(urllib.request.urlopen(req, timeout=30))
+
+    repo = str(a.get("repository", "")).replace("https://github.com/", "")
+    want_commit = a.get("commit")
+    want_event = str(a.get("event_id") or "")
+    declared_head = (rec.get("provenance") or {}).get("commitment_log_head")
+
+    # GitHub documents 300 events over 30 days; page to that limit rather
+    # than reading only the first hundred
+    hit, pages = None, []
+    try:
+        for page in range(1, 4):
+            batch = _get(f"https://api.github.com/repos/{repo}/events"
+                         f"?per_page=100&page={page}")
+            if not batch:
+                break
+            pages += batch
+            hit = next((e for e in pages
+                        if e.get("type") == "PushEvent"
+                        and (e.get("payload") or {}).get("head") == want_commit),
+                       None)
+            if hit:
+                break
     except Exception as exc:
         res.incomplete(f"--online requested but the events API could not be "
                        f"read ({str(exc)[:60]}). Unauthenticated requests are "
-                       f"rate limited; retry with a GitHub token in the "
-                       f"Authorization header. Public chronology unchecked")
+                       f"rate limited; set GH_TOKEN and retry. Public "
+                       f"chronology unchecked")
         return
-    want = a.get("commit")
-    hit = next((e for e in events
-                if e.get("type") == "PushEvent"
-                and (e.get("payload") or {}).get("head") == want), None)
+
     if not hit:
         res.incomplete(
-            f"no PushEvent for commit {str(want)[:12]} in the current event "
-            f"feed. GitHub exposes at most 30 days and 300 events, so an "
-            f"older anchor legitimately disappears: this is unchecked, not "
-            f"disproved")
+            f"no PushEvent for commit {str(want_commit)[:12]} in the "
+            f"{len(pages)} events available. GitHub exposes at most 300 "
+            f"events over 30 days, so an older anchor legitimately "
+            f"disappears: unchecked, not disproved")
         return
+
+    if want_event and str(hit.get("id")) != want_event:
+        res.fail(f"the PushEvent for this commit is {hit.get('id')}, not the "
+                 f"{want_event} this record declares")
+    if hit.get("created_at") != a.get("event_created_at"):
+        res.fail(f"the event's actual created_at is {hit.get('created_at')}, "
+                 f"not the {a.get('event_created_at')} this record declares")
     ev_ts = _parse_dt(hit.get("created_at"))
-    if ev_ts and issued and ev_ts < issued:
-        res.note(f"public chronology CHECKED: GitHub received the push at "
-                 f"{hit.get('created_at')}, before issuance "
-                 f"{rec.get('issued')} (event {hit.get('id')})")
-    else:
-        res.fail(f"the public event for {str(want)[:12]} is dated "
-                 f"{hit.get('created_at')}, not before issuance "
-                 f"{rec.get('issued')}")
+    if not (ev_ts and issued and ev_ts < issued):
+        res.fail(f"the public event is dated {hit.get('created_at')}, not "
+                 f"before issuance {rec.get('issued')}")
+
+    # the decisive step: does the log AT THAT COMMIT carry the head this
+    # record declares?
+    try:
+        blob = _get(f"https://api.github.com/repos/{repo}/contents/"
+                    f"{a.get('path','commitments.json')}?ref={want_commit}")
+        anchored = json.loads(base64.b64decode(blob["content"]))
+    except Exception as exc:
+        res.fail(f"could not read {a.get('path')} at commit "
+                 f"{str(want_commit)[:12]} ({str(exc)[:50]}): the anchor does "
+                 f"not demonstrably contain this log")
+        return
+
+    anchored_head = (anchored.get("signature") or {}).get("head")
+    if anchored_head != declared_head:
+        res.fail(f"the log published at commit {str(want_commit)[:12]} has "
+                 f"head {str(anchored_head)[:16]} over "
+                 f"{len(anchored.get('entries') or [])} entries, but this "
+                 f"record declares head {str(declared_head)[:16]}. The anchor "
+                 f"does not bind this record's log")
+        return
+
+    # and does that log's own chain hold?
+    prev, broken = "0" * 64, None
+    for i, e in enumerate(anchored.get("entries") or [], 1):
+        body = {k: v for k, v in e.items() if k != "entry_hash"}
+        if hashlib.sha256(json.dumps(body, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest() != e.get("entry_hash"):
+            broken = f"entry {i} hash"
+            break
+        if e.get("prev") != prev:
+            broken = f"entry {i} chain"
+            break
+        prev = e.get("entry_hash")
+    if broken:
+        res.fail(f"the log at the anchoring commit is internally broken "
+                 f"({broken})")
+        return
+    if prev != anchored_head:
+        res.fail("the log at the anchoring commit does not end at its own "
+                 "signed head")
+        return
+
+    res.note(f"public chronology CHECKED end to end: PushEvent "
+             f"{hit.get('id')} at {hit.get('created_at')} carries commit "
+             f"{str(want_commit)[:12]}, whose {len(anchored.get('entries') or [])}"
+             f"-entry log has head {str(anchored_head)[:16]}, which is the head "
+             f"this record declares, and the event precedes issuance "
+             f"{rec.get('issued')}")
 
 
 def check_analyser_commitment(rec, res, commitments_path):
