@@ -295,6 +295,81 @@ def check_feature_bindings(rec, res):
                      f"the evidence post-dates the instrument it names")
 
 
+def check_anchor(rec, res, online=False):
+    """Check the anchor locally, and never imply more than was checked.
+
+    A record can name an anchor whose receipt POSTDATES its own issuance,
+    which would make the ordering claim false while every other check
+    passed. That is exactly what a reviewer produced by hand, and this
+    verifier said SELF_CONSISTENT_REPORT with exit 0. So the ordering is
+    now checked here.
+
+    What cannot be checked offline is whether the anchor exists at all.
+    Saying nothing left the READMEs claiming a check that was not
+    performed, so the absence is now reported explicitly rather than
+    implied."""
+    a = (rec.get("provenance") or {}).get("anchor")
+    if not a:
+        res.incomplete("record names no public anchor: its commitment "
+                       "timestamps are issuer-stated only")
+        return
+    got = a.get("event_created_at") or a.get("received_at")
+    issued = _parse_dt(rec.get("issued"))
+    ts = _parse_dt(got)
+    if not (ts and issued):
+        res.fail("anchor carries no readable timestamp")
+    elif ts >= issued:
+        res.fail(f"anchor was received at {got}, which is NOT before the "
+                 f"record's issuance at {rec.get('issued')}: the ordering "
+                 f"this record claims does not hold")
+    else:
+        res.note(f"anchor ordering holds locally: received {got} before "
+                 f"issuance {rec.get('issued')}")
+    if not online:
+        # Consistent with the signature rule: a check the caller did not
+        # request is a NOTE, not an INCOMPLETE. Only a requested check
+        # that could not be performed downgrades the verdict.
+        res.note("PUBLIC_CHRONOLOGY_NOT_CHECKED. The ordering above was "
+                 "checked against the record's own declaration only. To "
+                 "confirm the event exists, names this commit and precedes "
+                 "issuance, rerun with --online")
+        return
+    try:
+        import urllib.request
+        repo = str(a.get("repository", "")).replace(
+            "https://github.com/", "")
+        url = f"https://api.github.com/repos/{repo}/events?per_page=100"
+        req = urllib.request.Request(url, headers={
+            "Accept": "application/vnd.github+json"})
+        events = json.load(urllib.request.urlopen(req, timeout=30))
+    except Exception as exc:
+        res.incomplete(f"--online requested but the events API could not be "
+                       f"read ({str(exc)[:60]}). Unauthenticated requests are "
+                       f"rate limited; retry with a GitHub token in the "
+                       f"Authorization header. Public chronology unchecked")
+        return
+    want = a.get("commit")
+    hit = next((e for e in events
+                if e.get("type") == "PushEvent"
+                and (e.get("payload") or {}).get("head") == want), None)
+    if not hit:
+        res.incomplete(
+            f"no PushEvent for commit {str(want)[:12]} in the current event "
+            f"feed. GitHub exposes at most 30 days and 300 events, so an "
+            f"older anchor legitimately disappears: this is unchecked, not "
+            f"disproved")
+        return
+    ev_ts = _parse_dt(hit.get("created_at"))
+    if ev_ts and issued and ev_ts < issued:
+        res.note(f"public chronology CHECKED: GitHub received the push at "
+                 f"{hit.get('created_at')}, before issuance "
+                 f"{rec.get('issued')} (event {hit.get('id')})")
+    else:
+        res.fail(f"the public event for {str(want)[:12]} is dated "
+                 f"{hit.get('created_at')}, not before issuance "
+                 f"{rec.get('issued')}")
+
+
 def check_analyser_commitment(rec, res, commitments_path):
     """Was the instrument that produced this record committed BEFORE the
     record was issued?
@@ -357,7 +432,7 @@ DISPATCH = {"gate": check_gate_payload,
 
 
 def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
-           commitments=None):
+           commitments=None, online=False):
     res = Result()
     try:
         rec = json.load(open(path))
@@ -384,6 +459,7 @@ def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
 
     check_issued(rec, res, issuer_keys)
     check_feature_bindings(rec, res)
+    check_anchor(rec, res, online=online)
     check_analyser_commitment(rec, res, commitments)
 
     profile = rec.get("profile", "draft")
@@ -436,12 +512,16 @@ def main():
                     help="minimum profile you require")
     ap.add_argument("--issuer-keys", help="published issuer key file, "
                                           "obtained out of band")
+    ap.add_argument("--online", action="store_true",
+                    help="check the public anchor event over the network; "
+                         "without it the public chronology is reported as "
+                         "not checked rather than assumed")
     ap.add_argument("--commitments", help="the published append-only "
                     "commitment log, to check that the analyser behind "
                     "this record was committed before it was issued")
     a = ap.parse_args()
     return verify(a.record, a.sources, a.profile, a.issuer_keys,
-                  a.commitments)
+                  a.commitments, a.online)
 
 
 if __name__ == "__main__":
