@@ -168,7 +168,44 @@ been issued.
 
 `tools/verify_commitments.py` checks the append-only commitment log
 itself: entry hashes, the chain back to genesis, and the head
-signature.
+signature. Without pynacl a requested signature check returns
+INCOMPLETE and a non-zero exit; it will never call a log authentic that
+it could not check.
+
+## What a Gate finding contains
+
+Beyond the statement of the gap, every finding carries a
+**counterexample**: a concrete world, one result per job, in which the
+uncovered job fails and the gate still reports success. Each is
+constructed and then checked by evaluating the gate's own condition
+under it, and none is emitted when the gate would go red. A tool that
+can always produce a counterexample is producing decoration. The sample
+at https://arcifact.io/gate ships the engine so you can rebuild the
+world from your own copy of the workflow rather than trusting the one
+in the record.
+
+Findings fall into four families rather than one list:
+
+| family | examples |
+|---|---|
+| what the gate misses | job outside needs; result in needs but never inspected; path-gated validator outside the closure |
+| whether it can fail at all | failure step suppressed by a predicate its producer never set; step or job marked continue-on-error; step guarded by `failure()`, which reports on the gate's own steps and not on its needs; `always()` with no failing step |
+| what it accepts as passing | rejects only outright failure, so a cancelled job passes; matrix fail-fast turning one failure into several cancellations |
+| what it cannot see | a job inside a reusable workflow marked continue-on-error, which fails without failing its caller; required contexts produced by no workflow, or by two |
+
+## Repository-level analysis
+
+Single-file analysis cannot see through `uses:`. A job that delegates to
+a reusable workflow is one node in the caller and a whole graph in the
+callee, and the caller's success does not mean everything in that graph
+passed.
+
+The sample package ships `repo.py`, which expands local callees
+recursively with cycle detection, finds jobs inside them that cannot
+fail their caller, and resolves required contexts across every
+workflow. Remote callees are not fetched and are reported unresolved,
+because analysing a file that was never read is the assumption this
+project exists to refuse.
 
 ## Certificate verification
 `tools/verify_certificate.py` verifies an Arcifact Evidence
