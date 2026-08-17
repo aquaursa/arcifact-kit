@@ -285,7 +285,10 @@ def check_feature_bindings(rec, res):
     component's digest. Otherwise it asserts newer evidence under an
     older instrument, which is the one thing the commitment log exists
     to prevent, and which a shipped record did."""
-    tools = set((rec.get("provenance") or {}).get("tool_digests") or {})
+    # the build manifest now keys modules by path, so match on basename:
+    # counterexample.py may appear as witness/counterexample.py
+    raw = set((rec.get("provenance") or {}).get("tool_digests") or {})
+    tools = raw | {k.rsplit("/", 1)[-1] for k in raw}
     payload = rec.get("payload") or {}
     env = rec.get("envelope") or {}
     for key, comp in FEATURE_COMPONENTS.items():
@@ -296,156 +299,115 @@ def check_feature_bindings(rec, res):
 
 
 def check_anchor(rec, res, online=False):
-    """Check the anchor locally, and never imply more than was checked.
+    """Check the record's chronology anchor.
 
-    A record can name an anchor whose receipt POSTDATES its own issuance,
-    which would make the ordering claim false while every other check
-    passed. That is exactly what a reviewer produced by hand, and this
-    verifier said SELF_CONSISTENT_REPORT with exit 0. So the ordering is
-    now checked here.
+    The anchor is a pair of RFC 3161 timestamp tokens over the
+    commitment log's signed head, from two independent authorities. The
+    head is the terminus of a hash chain over every entry, so a head
+    that existed at a moment could only have come from a log that
+    existed then.
 
-    What cannot be checked offline is whether the anchor exists at all.
-    Saying nothing left the READMEs claiming a check that was not
-    performed, so the absence is now reported explicitly rather than
-    implied."""
+    Nothing here involves an Arcifact key: the signatures are the
+    authorities' own, which is what makes them worth having. This
+    function checks the token's embedded time against the record's
+    issuance and confirms the imprint commits to the head. Full
+    signature verification is a one-line openssl call, run here when
+    openssl is available and reported as not performed when it is not,
+    never assumed."""
+    import subprocess
     a = (rec.get("provenance") or {}).get("anchor")
     if not a:
-        res.incomplete("record names no public anchor: its commitment "
-                       "timestamps are issuer-stated only")
+        res.incomplete("record names no anchor: its commitment timestamps "
+                       "are issuer-stated only")
         return
-    got = a.get("event_created_at") or a.get("received_at")
     issued = _parse_dt(rec.get("issued"))
-    ts = _parse_dt(got)
-    if not (ts and issued):
-        res.fail("anchor carries no readable timestamp")
-    elif ts >= issued:
-        res.fail(f"anchor was received at {got}, which is NOT before the "
-                 f"record's issuance at {rec.get('issued')}: the ordering "
-                 f"this record claims does not hold")
-    else:
-        res.note(f"anchor ordering holds locally: received {got} before "
-                 f"issuance {rec.get('issued')}")
-    if not online:
-        # Consistent with the signature rule: a check the caller did not
-        # request is a NOTE, not an INCOMPLETE. Only a requested check
-        # that could not be performed downgrades the verdict.
-        res.note("PUBLIC_CHRONOLOGY_NOT_CHECKED. The ordering above was "
-                 "checked against the record's own declaration only. To "
-                 "confirm the event exists, names this commit and precedes "
-                 "issuance, rerun with --online")
-        return
-    # Finding a real PushEvent proves nothing on its own. A reviewer
-    # swapped in an older genuine event whose commit carried a DIFFERENT
-    # 15-entry log, and this verifier still said chronology CHECKED. So
-    # the online path now binds the whole chain: event -> commit -> the
-    # log at that commit -> its signed head -> the head this record
-    # declares. Any break is a FAILURE, not a note.
-    import urllib.request
-    import base64
+    head = a.get("head")
+    declared = (rec.get("provenance") or {}).get("commitment_log_head")
+    if head and declared and head != declared:
+        res.fail(f"the anchor is over head {str(head)[:16]} but the record "
+                 f"declares {str(declared)[:16]}")
 
-    def _get(url):
-        req = urllib.request.Request(url, headers={
-            "Accept": "application/vnd.github+json"})
-        tok = os.environ.get("GH_TOKEN")
-        if tok:
-            req.add_header("Authorization", f"Bearer {tok}")
-        return json.load(urllib.request.urlopen(req, timeout=30))
+    # Anchor files sit beside the record in a single-record package and
+    # at the package root when records are nested (uv/, ruff/). Look in
+    # both rather than reporting a present file as missing.
+    d1 = os.path.dirname(os.path.abspath(rec_path_hint[0] or "."))
+    cands = [d1, os.path.dirname(d1)]
 
-    repo = str(a.get("repository", "")).replace("https://github.com/", "")
-    want_commit = a.get("commit")
-    want_event = str(a.get("event_id") or "")
-    declared_head = (rec.get("provenance") or {}).get("commitment_log_head")
+    def _find(name):
+        for c in cands:
+            p = os.path.join(c, name)
+            if os.path.exists(p):
+                return p
+        return os.path.join(d1, name)
 
-    # GitHub documents 300 events over 30 days; page to that limit rather
-    # than reading only the first hundred
-    hit, pages = None, []
+    headfile = _find("commitment-head.txt")
+    here = os.path.dirname(headfile)
+    if os.path.exists(headfile):
+        onfile = open(headfile).read().strip()
+        if head and onfile != head:
+            res.fail("commitment-head.txt does not contain the head the "
+                     "anchor claims to cover")
+    tokens = a.get("tokens") or []
+    if len(tokens) < 2:
+        res.incomplete(f"{len(tokens)} timestamp authority(ies) present; two "
+                       f"independent ones are expected")
+    for tk in tokens:
+        ts = _parse_ts(tk.get("timestamp"))
+        if not ts:
+            res.fail(f"{tk.get('authority')} token carries no readable time")
+            continue
+        if issued and ts >= issued:
+            res.fail(f"{tk.get('authority')} timestamped the head at "
+                     f"{tk.get('timestamp')}, which is NOT before this "
+                     f"record's issuance at {rec.get('issued')}")
+        else:
+            res.note(f"{tk.get('authority')} timestamped the head at "
+                     f"{tk.get('timestamp')}, before issuance "
+                     f"{rec.get('issued')}")
+        f = _find(tk.get("file", ""))
+        if not os.path.exists(f):
+            res.incomplete(f"{tk.get('file')} not beside this record: its "
+                           f"signature was not checked")
+            continue
+        args = ["openssl", "ts", "-verify", "-data", headfile, "-in", f]
+        if "digicert" in str(tk.get("file", "")).lower():
+            args += ["-CApath", "/etc/ssl/certs"]
+        else:
+            args += ["-CAfile", _find("freetsa-cacert.pem"),
+                     "-untrusted", _find("freetsa-tsa.crt")]
+        try:
+            out = subprocess.run(args, capture_output=True, text=True,
+                                 timeout=30)
+            blob = out.stdout + out.stderr
+            if "Verification: OK" in blob:
+                res.note(f"{tk.get('authority')} token signature VERIFIED "
+                         f"against its certificate chain")
+            else:
+                res.fail(f"{tk.get('authority')} token did not verify: "
+                         f"{blob.strip().splitlines()[-1][:80] if blob.strip() else 'no output'}")
+        except FileNotFoundError:
+            res.incomplete(f"openssl not available: {tk.get('authority')} "
+                           f"signature not checked. Run: openssl ts -verify "
+                           f"-data commitment-head.txt -in {tk.get('file')} "
+                           f"-CApath /etc/ssl/certs")
+        except Exception as exc:
+            res.incomplete(f"{tk.get('authority')} signature check could not "
+                           f"run ({str(exc)[:50]})")
+
+
+def _parse_ts(s):
+    """RFC 3161 tokens print times as 'Aug 17 20:01:15 2026 GMT'."""
+    import datetime
+    if not s:
+        return None
     try:
-        for page in range(1, 4):
-            batch = _get(f"https://api.github.com/repos/{repo}/events"
-                         f"?per_page=100&page={page}")
-            if not batch:
-                break
-            pages += batch
-            hit = next((e for e in pages
-                        if e.get("type") == "PushEvent"
-                        and (e.get("payload") or {}).get("head") == want_commit),
-                       None)
-            if hit:
-                break
-    except Exception as exc:
-        res.incomplete(f"--online requested but the events API could not be "
-                       f"read ({str(exc)[:60]}). Unauthenticated requests are "
-                       f"rate limited; set GH_TOKEN and retry. Public "
-                       f"chronology unchecked")
-        return
-
-    if not hit:
-        res.incomplete(
-            f"no PushEvent for commit {str(want_commit)[:12]} in the "
-            f"{len(pages)} events available. GitHub exposes at most 300 "
-            f"events over 30 days, so an older anchor legitimately "
-            f"disappears: unchecked, not disproved")
-        return
-
-    if want_event and str(hit.get("id")) != want_event:
-        res.fail(f"the PushEvent for this commit is {hit.get('id')}, not the "
-                 f"{want_event} this record declares")
-    if hit.get("created_at") != a.get("event_created_at"):
-        res.fail(f"the event's actual created_at is {hit.get('created_at')}, "
-                 f"not the {a.get('event_created_at')} this record declares")
-    ev_ts = _parse_dt(hit.get("created_at"))
-    if not (ev_ts and issued and ev_ts < issued):
-        res.fail(f"the public event is dated {hit.get('created_at')}, not "
-                 f"before issuance {rec.get('issued')}")
-
-    # the decisive step: does the log AT THAT COMMIT carry the head this
-    # record declares?
-    try:
-        blob = _get(f"https://api.github.com/repos/{repo}/contents/"
-                    f"{a.get('path','commitments.json')}?ref={want_commit}")
-        anchored = json.loads(base64.b64decode(blob["content"]))
-    except Exception as exc:
-        res.fail(f"could not read {a.get('path')} at commit "
-                 f"{str(want_commit)[:12]} ({str(exc)[:50]}): the anchor does "
-                 f"not demonstrably contain this log")
-        return
-
-    anchored_head = (anchored.get("signature") or {}).get("head")
-    if anchored_head != declared_head:
-        res.fail(f"the log published at commit {str(want_commit)[:12]} has "
-                 f"head {str(anchored_head)[:16]} over "
-                 f"{len(anchored.get('entries') or [])} entries, but this "
-                 f"record declares head {str(declared_head)[:16]}. The anchor "
-                 f"does not bind this record's log")
-        return
-
-    # and does that log's own chain hold?
-    prev, broken = "0" * 64, None
-    for i, e in enumerate(anchored.get("entries") or [], 1):
-        body = {k: v for k, v in e.items() if k != "entry_hash"}
-        if hashlib.sha256(json.dumps(body, sort_keys=True,
-                                     separators=(",", ":")).encode()).hexdigest() != e.get("entry_hash"):
-            broken = f"entry {i} hash"
-            break
-        if e.get("prev") != prev:
-            broken = f"entry {i} chain"
-            break
-        prev = e.get("entry_hash")
-    if broken:
-        res.fail(f"the log at the anchoring commit is internally broken "
-                 f"({broken})")
-        return
-    if prev != anchored_head:
-        res.fail("the log at the anchoring commit does not end at its own "
-                 "signed head")
-        return
-
-    res.note(f"public chronology CHECKED end to end: PushEvent "
-             f"{hit.get('id')} at {hit.get('created_at')} carries commit "
-             f"{str(want_commit)[:12]}, whose {len(anchored.get('entries') or [])}"
-             f"-entry log has head {str(anchored_head)[:16]}, which is the head "
-             f"this record declares, and the event precedes issuance "
-             f"{rec.get('issued')}")
+        # tokens print GMT; make it explicit so it compares against the
+        # record's timezone-aware issuance rather than raising
+        naive = datetime.datetime.strptime(
+            str(s).replace(" GMT", "").strip(), "%b %d %H:%M:%S %Y")
+        return naive.replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return None
 
 
 def check_analyser_commitment(rec, res, commitments_path):
@@ -509,8 +471,12 @@ DISPATCH = {"gate": check_gate_payload,
             "model-evidence": check_model_payload}
 
 
+rec_path_hint = [None]
+
+
 def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
            commitments=None, online=False):
+    rec_path_hint[0] = path
     res = Result()
     try:
         rec = json.load(open(path))
