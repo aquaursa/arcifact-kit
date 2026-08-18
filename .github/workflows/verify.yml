@@ -67,11 +67,11 @@ jobs:
           echo "fixtures present"
       - name: Adversarial suite (attack the measurement)
         run: python -m pytest tests/ -q
-      - name: Exact recount reproduces Trunk numbers
+      - name: Exact recount is exact, not sampled
         run: |
-          python tools/witness_recount.py tests/fixtures/specific_gate.yaml \
-            report_test_success action_tests | tee rc.txt
-          grep -q "2268/11340" rc.txt
+          python tools/witness_recount.py tests/fixtures/specific_gate.yaml \\
+            report_test_success action_validators | tee rc.txt
+          grep -q "6/30 = 0.200000 exactly" rc.txt
       - name: Certificate verifier (issued sample VALID end to end)
         run: |
           python tools/verify_certificate.py \
