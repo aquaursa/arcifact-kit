@@ -1,3 +1,5 @@
+import re
+import subprocess
 #!/usr/bin/env python3
 """Verify an Arcifact report against the common envelope.
 
@@ -298,7 +300,7 @@ def check_feature_bindings(rec, res):
                      f"the evidence post-dates the instrument it names")
 
 
-def check_anchor(rec, res, online=False):
+def check_anchor(rec, res):
     """Check the record's chronology anchor.
 
     The anchor is a pair of RFC 3161 timestamp tokens over the
@@ -352,23 +354,51 @@ def check_anchor(rec, res, online=False):
         res.incomplete(f"{len(tokens)} timestamp authority(ies) present; two "
                        f"independent ones are expected")
     for tk in tokens:
-        ts = _parse_ts(tk.get("timestamp"))
-        if not ts:
-            res.fail(f"{tk.get('authority')} token carries no readable time")
-            continue
-        if issued and ts >= issued:
-            res.fail(f"{tk.get('authority')} timestamped the head at "
-                     f"{tk.get('timestamp')}, which is NOT before this "
-                     f"record's issuance at {rec.get('issued')}")
-        else:
-            res.note(f"{tk.get('authority')} timestamped the head at "
-                     f"{tk.get('timestamp')}, before issuance "
-                     f"{rec.get('issued')}")
         f = _find(tk.get("file", ""))
         if not os.path.exists(f):
             res.incomplete(f"{tk.get('file')} not beside this record: its "
-                           f"signature was not checked")
+                           f"signature and time were not checked")
             continue
+
+        # The authoritative time is the one INSIDE the signed token, not
+        # the one the record declares beside it. An earlier version
+        # trusted the JSON field, so editing that field and resealing
+        # was enough to fake the ordering.
+        embedded = None
+        try:
+            rep = subprocess.run(["openssl", "ts", "-reply", "-in", f,
+                                  "-text"], capture_output=True, text=True,
+                                 timeout=30)
+            m = re.search(r"Time stamp:\s*(.+)", rep.stdout)
+            if m:
+                embedded = _parse_ts(m.group(1).strip())
+        except FileNotFoundError:
+            res.incomplete(f"openssl not available: {tk.get('authority')} "
+                           f"token time could not be read from the token, "
+                           f"so the ordering was NOT checked")
+            continue
+        except Exception as exc:
+            res.incomplete(f"{tk.get('authority')} token could not be read "
+                           f"({str(exc)[:40]}): ordering NOT checked")
+            continue
+        if not embedded:
+            res.fail(f"{tk.get('authority')} token carries no readable time")
+            continue
+
+        declared = _parse_ts(tk.get("timestamp"))
+        if declared and declared != embedded:
+            res.fail(f"{tk.get('authority')}: the record declares "
+                     f"{tk.get('timestamp')} but the signed token says "
+                     f"{embedded.strftime('%b %d %H:%M:%S %Y')} GMT")
+        if issued and embedded >= issued:
+            res.fail(f"{tk.get('authority')} signed the head at "
+                     f"{embedded.strftime('%b %d %H:%M:%S %Y')} GMT, which "
+                     f"is NOT before issuance {rec.get('issued')}")
+        else:
+            res.note(f"{tk.get('authority')} signed the head at "
+                     f"{embedded.strftime('%b %d %H:%M:%S %Y')} GMT "
+                     f"(read from the token), before issuance "
+                     f"{rec.get('issued')}")
         args = ["openssl", "ts", "-verify", "-data", headfile, "-in", f]
         if "digicert" in str(tk.get("file", "")).lower():
             args += ["-CApath", "/etc/ssl/certs"]
@@ -440,6 +470,31 @@ def check_analyser_commitment(rec, res, commitments_path):
         res.fail(f"cannot read commitment log: {str(exc)[:60]}")
         return
     entries = log.get("entries") or []
+
+    # Validate the log before believing anything in it. A corrupted final
+    # entry previously left verify_commitments.py returning INVALID while
+    # this verifier happily reported the analysers as committed.
+    prev, broken = "0" * 64, None
+    for i, e in enumerate(entries, 1):
+        body = {k: v for k, v in e.items() if k != "entry_hash"}
+        if hashlib.sha256(json.dumps(body, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest() != e.get("entry_hash"):
+            broken = f"entry {i}: hash does not recompute"
+            break
+        if e.get("prev") != prev:
+            broken = f"entry {i}: broken chain"
+            break
+        prev = e.get("entry_hash")
+    sig_head = (log.get("signature") or {}).get("head")
+    if broken:
+        res.fail(f"the supplied commitment log is invalid ({broken}): no "
+                 f"claim about what was committed can rest on it")
+        return
+    if sig_head and prev != sig_head:
+        res.fail("the supplied commitment log does not end at its own "
+                 "signed head: no commitment claim can rest on it")
+        return
+
     declared = (rec.get("provenance") or {}).get("commitment_log_head")
     actual = (log.get("signature") or {}).get("head")
     if declared and actual and declared != actual:
@@ -475,7 +530,7 @@ rec_path_hint = [None]
 
 
 def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
-           commitments=None, online=False):
+           commitments=None):
     rec_path_hint[0] = path
     res = Result()
     try:
@@ -503,7 +558,7 @@ def verify(path, sources_dir=None, want_profile=None, issuer_keys=None,
 
     check_issued(rec, res, issuer_keys)
     check_feature_bindings(rec, res)
-    check_anchor(rec, res, online=online)
+    check_anchor(rec, res)
     check_analyser_commitment(rec, res, commitments)
 
     profile = rec.get("profile", "draft")
@@ -556,16 +611,12 @@ def main():
                     help="minimum profile you require")
     ap.add_argument("--issuer-keys", help="published issuer key file, "
                                           "obtained out of band")
-    ap.add_argument("--online", action="store_true",
-                    help="check the public anchor event over the network; "
-                         "without it the public chronology is reported as "
-                         "not checked rather than assumed")
     ap.add_argument("--commitments", help="the published append-only "
                     "commitment log, to check that the analyser behind "
                     "this record was committed before it was issued")
     a = ap.parse_args()
     return verify(a.record, a.sources, a.profile, a.issuer_keys,
-                  a.commitments, a.online)
+                  a.commitments)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,50 @@
+# Synthetic fixture. A gate that names each need's result individually
+# rather than iterating, with one validator outside its closure.
+#
+# Previously this fixture was a copy of a named third party's workflow.
+# A public test corpus should exercise a code path, not identify whose
+# configuration was examined.
+name: pr
+on: [pull_request]
+jobs:
+  detect_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      linters: ${{ steps.f.outputs.linters }}
+      tools: ${{ steps.f.outputs.tools }}
+      actions: ${{ steps.f.outputs.actions }}
+    steps:
+      - id: f
+        run: echo "linters=true" >> "$GITHUB_OUTPUT"
+  linter_tests:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.linters == 'true'
+    runs-on: ubuntu-latest
+    steps: [{run: make lint}]
+  tool_tests:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    steps: [{run: make tools}]
+  repo_tests:
+    needs: [detect_changes]
+    runs-on: ubuntu-latest
+    steps: [{run: make repo}]
+  action_validators:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.actions == 'true'
+    runs-on: ubuntu-latest
+    steps: [{run: make actions}]
+  report_test_success:
+    name: Aggregate Test Results
+    needs: [linter_tests, tool_tests, repo_tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          linters="${{ needs.linter_tests.result }}"
+          repos="${{ needs.repo_tests.result }}"
+          tools="${{ needs.tool_tests.result }}"
+          if [[ $linters == "failure" || $repos == "failure" || $tools == "failure" ]]; then
+            exit 1
+          fi

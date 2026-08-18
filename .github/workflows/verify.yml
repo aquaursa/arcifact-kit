@@ -69,7 +69,7 @@ jobs:
         run: python -m pytest tests/ -q
       - name: Exact recount reproduces Trunk numbers
         run: |
-          python tools/witness_recount.py tests/fixtures/trunk_pr.yaml \
+          python tools/witness_recount.py tests/fixtures/specific_gate.yaml \
             report_test_success action_tests | tee rc.txt
           grep -q "2268/11340" rc.txt
       - name: Certificate verifier (issued sample VALID end to end)
